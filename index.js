@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -10,54 +10,46 @@ const client = new Client({
 
 const TRADE_CHANNEL_ID = '1488481964494159953';
 
-let stickyMessageId = null;
-
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
     
-    const commands = [{ name: 'trade', description: 'Post a trade advertisement' }];
+    const commands = [
+        { name: 'trade', description: 'Post a trade advertisement' },
+        { name: 'forcebutton', description: 'Force sticky button to appear' }
+    ];
     await client.application.commands.set(commands);
-    console.log('✅ /trade command registered');
+    console.log('✅ Commands registered');
 });
 
-// ==================== FIXED STICKY PANEL (No more spam) ====================
-client.on('messageCreate', async message => {
-    if (message.channel.id !== TRADE_CHANNEL_ID) return;
-    if (message.author.bot) return;   // ← Prevents spam from bot messages
+// Force button to appear
+client.on('interactionCreate', async interaction => {
+    if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
+        const postBtn = new ButtonBuilder()
+            .setCustomId('post_trade_button')
+            .setLabel('📝 Post New Trade')
+            .setStyle(ButtonStyle.Success);
 
-    // Delete old sticky
-    if (stickyMessageId) {
-        try {
-            const oldMsg = await message.channel.messages.fetch(stickyMessageId);
-            await oldMsg.delete().catch(() => {});
-        } catch (e) {}
+        const searchBtn = new ButtonBuilder()
+            .setCustomId('search_trade_button')
+            .setLabel('🔍 Search Trades')
+            .setStyle(ButtonStyle.Secondary);
+
+        const row = new ActionRowBuilder().addComponents(postBtn, searchBtn);
+
+        const channel = client.channels.cache.get(TRADE_CHANNEL_ID);
+        if (channel) {
+            await channel.send({
+                content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nUse the buttons below:',
+                components: [row]
+            });
+            await interaction.reply({ content: '✅ Sticky button posted!', ephemeral: true });
+        }
+        return;
     }
 
-    const postBtn = new ButtonBuilder()
-        .setCustomId('post_trade_button')
-        .setLabel('📝 Post New Trade')
-        .setStyle(ButtonStyle.Success);
-
-    const searchBtn = new ButtonBuilder()
-        .setCustomId('search_trade_button')
-        .setLabel('🔍 Search Trades')
-        .setStyle(ButtonStyle.Secondary);
-
-    const row = new ActionRowBuilder().addComponents(postBtn, searchBtn);
-
-    const stickyMsg = await message.channel.send({
-        content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nUse the buttons below:',
-        components: [row]
-    });
-
-    stickyMessageId = stickyMsg.id;
-});
-
-client.on('interactionCreate', async interaction => {
-
-    // === Post New Trade Button ===
+    // Post New Trade Button
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
-        await interaction.deferUpdate();   // ← This prevents "interaction failed"
+        await interaction.deferUpdate();   // ← This is the key fix
 
         const modal = new ModalBuilder()
             .setCustomId('trade_modal')
@@ -74,7 +66,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // === Modal Submitted ===
+    // Modal Submitted
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
@@ -108,18 +100,17 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: '✅ Your trade has been posted!', ephemeral: true });
     }
 
-    // === Search Button (Improved) ===
+    // Search Button
     if (interaction.isButton() && interaction.customId === 'search_trade_button') {
-        await interaction.deferUpdate();   // ← Prevents failed message
+        await interaction.deferUpdate();
 
         await interaction.followUp({
-            content: '🔍 Search is currently basic.\n\nPlease type what you are looking for in the channel or use the Post button to create offers.',
+            content: '🔍 Search is not fully ready yet.\nScroll the channel or use Post New Trade.',
             ephemeral: true
         });
-        return;
     }
 
-    // === Start Trade Button ===
+    // Start Trade Button
     if (interaction.isButton() && interaction.customId.startsWith('start_trade_')) {
         await interaction.deferUpdate();
 
@@ -155,7 +146,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // === Close Thread ===
     if (interaction.isButton() && interaction.customId === 'close_thread') {
         if (interaction.channel.isThread()) {
             await interaction.channel.setArchived(true);
