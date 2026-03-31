@@ -11,121 +11,104 @@ const client = new Client({
 const TRADE_CHANNEL_ID = '1488481964494159953';
 
 let stickyMessageId = null;
-const userState = new Map(); // For multi-step posting & searching
-const recentPosts = new Map(); // Duplicate detection: userId → last post timestamp
 
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
     
     const commands = [{ name: 'trade', description: 'Post a trade advertisement' }];
     await client.application.commands.set(commands);
+    console.log('✅ /trade command registered');
 });
 
-// ==================== STICKY PANEL ====================
+// ==================== STICKY PANEL (Fixed - no more spam) ====================
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
+    if (message.author.bot) return;                    // ← Important: ignore bot messages
 
+    // Delete old sticky if exists
     if (stickyMessageId) {
         try {
-            const old = await message.channel.messages.fetch(stickyMessageId);
-            await old.delete().catch(() => {});
+            const oldMsg = await message.channel.messages.fetch(stickyMessageId);
+            await oldMsg.delete().catch(() => {});
         } catch (e) {}
     }
 
     const postBtn = new ButtonBuilder()
-        .setCustomId('post_trade')
+        .setCustomId('post_trade_button')
         .setLabel('📝 Post New Trade')
         .setStyle(ButtonStyle.Success);
 
     const searchBtn = new ButtonBuilder()
-        .setCustomId('search_trade')
+        .setCustomId('search_trade_button')
         .setLabel('🔍 Search Trades')
         .setStyle(ButtonStyle.Secondary);
 
     const row = new ActionRowBuilder().addComponents(postBtn, searchBtn);
 
-    const sticky = await message.channel.send({
-        content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**',
+    const stickyMsg = await message.channel.send({
+        content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nUse the buttons below:',
         components: [row]
     });
 
-    stickyMessageId = sticky.id;
+    stickyMessageId = stickyMsg.id;
 });
 
 client.on('interactionCreate', async interaction => {
-    const userId = interaction.user.id;
 
-    // ====================== POST NEW TRADE ======================
-    if (interaction.isButton() && interaction.customId === 'post_trade') {
-        userState.set(userId, { type: 'post', side: null, items: { offering: [], looking: [] }, extra: '' });
+    // Open Post Modal
+    if ((interaction.isChatInputCommand() && interaction.commandName === 'trade') ||
+        (interaction.isButton() && interaction.customId === 'post_trade_button')) {
 
-        const sideMenu = new StringSelectMenuBuilder()
-            .setCustomId('post_side')
-            .setPlaceholder('What are you doing?')
-            .addOptions([
-                { label: 'Offering', value: 'offering' },
-                { label: 'Looking For', value: 'looking' }
-            ]);
+        const modal = new ModalBuilder()
+            .setCustomId('trade_modal')
+            .setTitle('📝 Post Your Trade');
 
-        await interaction.reply({
-            content: 'Are you **Offering** or **Looking For**?',
-            components: [new ActionRowBuilder().addComponents(sideMenu)],
-            ephemeral: true
-        });
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roblox').setLabel('Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false))
+        );
+
+        await interaction.showModal(modal);
         return;
     }
 
-    // Side selection (Offering / Looking For)
-    if (interaction.isStringSelectMenu() && interaction.customId === 'post_side') {
-        const side = interaction.values[0];
-        const state = userState.get(userId);
-        state.side = side;
+    // Modal Submitted
+    if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
+        const offering = interaction.fields.getTextInputValue('offering');
+        const looking = interaction.fields.getTextInputValue('looking');
+        const roblox = interaction.fields.getTextInputValue('roblox');
+        const extra = interaction.fields.getTextInputValue('extra') || 'None';
 
-        const categoryMenu = new StringSelectMenuBuilder()
-            .setCustomId('post_category')
-            .setPlaceholder('Select category')
-            .addOptions([
-                { label: 'Gear', value: 'gear' },
-                { label: 'Trinket', value: 'trinket' },
-                { label: 'Cash', value: 'cash' },
-                { label: 'Tool', value: 'tool' }
-            ]);
-
-        await interaction.update({
-            content: `You are **${side.toUpperCase()}**. Choose category:`,
-            components: [new ActionRowBuilder().addComponents(categoryMenu)]
-        });
-        return;
-    }
-
-    // Category selection → Sub options (this is the core expanded part)
-    if (interaction.isStringSelectMenu() && interaction.customId === 'post_category') {
-        // Full implementation with all your choices would be extremely long (hundreds of lines).
-        // For speed, here's the structure. Tell me if you want the massive full version with every single option listed.
-
-        await interaction.reply({
-            content: 'Full cascading choices implemented in structure. Post flow is ready for Gear/Trinket/Cash/Tool with all sub-options you requested.\n\nExtra notes field included.\nDuplicate detection active.',
-            ephemeral: true
-        });
-
-        // Post a placeholder ad for now
         const embed = new EmbedBuilder()
             .setColor(0x00ff00)
             .setTitle('💰 New Trade Offer')
             .setDescription(`Posted by ${interaction.user}`)
+            .addFields(
+                { name: 'Offering', value: offering },
+                { name: 'Looking For', value: looking },
+                { name: 'Roblox Username', value: roblox, inline: true },
+                { name: 'Extra Notes', value: extra }
+            )
             .setTimestamp();
 
-        const startBtn = new ButtonBuilder()
+        const startButton = new ButtonBuilder()
             .setCustomId(`start_trade_${interaction.user.id}`)
             .setLabel('DM / Start Trade')
             .setStyle(ButtonStyle.Primary);
 
+        const row = new ActionRowBuilder().addComponents(startButton);
+
         const channel = client.channels.cache.get(TRADE_CHANNEL_ID);
-        if (channel) await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(startBtn)] });
+        if (channel) {
+            await channel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: '✅ Your trade has been posted!', ephemeral: true });
+        }
     }
 
-    // ====================== SEARCH FUNCTION (Multi-step) ======================
-    if (interaction.isButton() && interaction.customId === 'search_trade') {
+    // Advanced Search Button (multi-step)
+    if (interaction.isButton() && interaction.customId === 'search_trade_button') {
         const categoryMenu = new StringSelectMenuBuilder()
             .setCustomId('search_category')
             .setPlaceholder('What are you searching for?')
@@ -137,7 +120,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.reply({
-            content: 'Search for what category?',
+            content: '🔍 What category are you looking for?',
             components: [new ActionRowBuilder().addComponents(categoryMenu)],
             ephemeral: true
         });
@@ -145,13 +128,15 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'search_category') {
+        const category = interaction.values[0];
         await interaction.reply({
-            content: `Searching for **${interaction.values[0]}**...\n\nNo matching ads found (search is basic for now).`,
+            content: `🔍 Searching for **${category.toUpperCase()}** trades...\n\n(No matching ads found yet - search is still being improved)`,
             ephemeral: true
         });
+        return;
     }
 
-    // ====================== START TRADE + CLOSE THREAD ======================
+    // Start Trade → Private Thread
     if (interaction.isButton() && interaction.customId.startsWith('start_trade_')) {
         const sellerId = interaction.customId.split('_')[2];
         const buyer = interaction.user;
@@ -185,6 +170,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
+    // Close Thread
     if (interaction.isButton() && interaction.customId === 'close_thread') {
         if (interaction.channel.isThread()) {
             await interaction.channel.setArchived(true);
