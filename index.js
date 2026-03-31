@@ -12,6 +12,7 @@ const TRADE_CHANNEL_ID = '1488481964494159953';
 
 let stickyMessageId = null;
 const userState = new Map();
+const tradesDB = []; // Simple in-memory database for search
 
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
@@ -56,22 +57,7 @@ client.on('messageCreate', async message => {
 
 client.on('interactionCreate', async interaction => {
     const userId = interaction.user.id;
-    let state = userState.get(userId) || { 
-        mode: 'post', 
-        side: null, 
-        category: null, 
-        level: null, 
-        type: null, 
-        overclock: null, 
-        rarity: null, 
-        statType: null,
-        trinketType: null, 
-        trinketStats: null, 
-        cashAmount: null, 
-        toolType: null, 
-        toolAmount: null,
-        items: { offering: [], looking: [] } 
-    };
+    let state = userState.get(userId) || { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
 
     // Force Button
     if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
@@ -98,7 +84,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Start Post
+    // ==================== POST FLOW (All categories expanded) ====================
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
         state = { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
         userState.set(userId, state);
@@ -140,112 +126,81 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Category selection
+    // Category → Sub options
     if (interaction.isStringSelectMenu() && interaction.customId === 'post_category') {
         state.category = interaction.values[0];
         userState.set(userId, state);
 
+        let options = [];
+
         if (state.category === 'gear') {
-            const levelMenu = new StringSelectMenuBuilder()
-                .setCustomId('gear_level')
-                .setPlaceholder('Select Level (required)')
-                .addOptions([
-                    { label: 'Under 100', value: 'under 100' },
-                    { label: '110', value: '110' },
-                    { label: '120', value: '120' },
-                    { label: '130', value: '130' },
-                    { label: '140', value: '140' },
-                    { label: '150', value: '150' },
-                    { label: '160', value: '160' },
-                    { label: '165', value: '165' },
-                    { label: '170', value: '170' },
-                    { label: '175', value: '175' },
-                    { label: '180', value: '180' },
-                    { label: '180+', value: '180+' }
-                ]);
-
-            await interaction.update({
-                content: 'Selected **Gear**. Choose Level (required):',
-                components: [new ActionRowBuilder().addComponents(levelMenu)]
-            });
+            options = [
+                { label: 'Under 100', value: 'under 100' },
+                { label: '110', value: '110' },
+                { label: '120', value: '120' },
+                { label: '130', value: '130' },
+                { label: '140', value: '140' },
+                { label: '150', value: '150' },
+                { label: '160', value: '160' },
+                { label: '165', value: '165' },
+                { label: '170', value: '170' },
+                { label: '175', value: '175' },
+                { label: '180', value: '180' },
+                { label: '180+', value: '180+' }
+            ];
         } else if (state.category === 'trinket') {
-            const typeMenu = new StringSelectMenuBuilder()
-                .setCustomId('trinket_type')
-                .setPlaceholder('Select Trinket Type (required)')
-                .addOptions([
-                    { label: 'Pen', value: 'Pen' },
-                    { label: 'Regen', value: 'Regen' },
-                    { label: 'Sprint', value: 'Sprint' },
-                    { label: 'Saver', value: 'Saver' },
-                    { label: 'Curve', value: 'Curve' },
-                    { label: 'Steal', value: 'Steal' },
-                    { label: 'Fast Pass', value: 'Fast Pass' },
-                    { label: 'Rebound', value: 'Rebound' }
-                ]);
-
-            await interaction.update({
-                content: 'Selected **Trinket**. Choose Type (required):',
-                components: [new ActionRowBuilder().addComponents(typeMenu)]
-            });
+            options = [
+                { label: 'Pen', value: 'Pen' },
+                { label: 'Regen', value: 'Regen' },
+                { label: 'Sprint', value: 'Sprint' },
+                { label: 'Saver', value: 'Saver' },
+                { label: 'Curve', value: 'Curve' },
+                { label: 'Steal', value: 'Steal' },
+                { label: 'Fast Pass', value: 'Fast Pass' },
+                { label: 'Rebound', value: 'Rebound' }
+            ];
         } else if (state.category === 'cash') {
-            const amountMenu = new StringSelectMenuBuilder()
-                .setCustomId('cash_amount')
-                .setPlaceholder('Select Amount (required)')
-                .addOptions([
-                    { label: 'Offer', value: 'Offer' },
-                    { label: 'Regular', value: 'Regular' },
-                    { label: 'Overpay', value: 'Overpay' },
-                    { label: '50k', value: '50k' },
-                    { label: '100k', value: '100k' },
-                    { label: '150k', value: '150k' },
-                    { label: '200k', value: '200k' },
-                    { label: '250k', value: '250k' },
-                    { label: '300k', value: '300k' },
-                    { label: '350k', value: '350k' },
-                    { label: '400k', value: '400k' },
-                    { label: '450k', value: '450k' },
-                    { label: '500k', value: '500k' },
-                    { label: '550k', value: '550k' },
-                    { label: '600k', value: '600k' },
-                    { label: '650k', value: '650k' },
-                    { label: '700k', value: '700k' },
-                    { label: '750k', value: '750k' },
-                    { label: '800k', value: '800k' },
-                    { label: '900k', value: '900k' },
-                    { label: '1m', value: '1m' },
-                    { label: '1.25m', value: '1.25m' },
-                    { label: '1.5m', value: '1.5m' },
-                    { label: '1.75m', value: '1.75m' },
-                    { label: '2m', value: '2m' },
-                    { label: '2.25m', value: '2.25m' },
-                    { label: '2.5m', value: '2.5m' },
-                    { label: '2.75m', value: '2.75m' },
-                    { label: '3m', value: '3m' },
-                    { label: '3m+', value: '3m+' }
-                ]);
-
-            await interaction.update({
-                content: 'Selected **Cash**. Choose Amount (required):',
-                components: [new ActionRowBuilder().addComponents(amountMenu)]
-            });
+            options = [
+                { label: 'Regular', value: 'Regular' },
+                { label: 'Overpay', value: 'Overpay' },
+                { label: 'Offer', value: 'Offer' },
+                { label: 'Under 250k', value: 'Under 250k' },
+                { label: '~300k', value: '~300k' },
+                { label: '~400k', value: '~400k' },
+                { label: '~500k', value: '~500k' },
+                { label: '~600k', value: '~600k' },
+                { label: '~700k', value: '~700k' },
+                { label: '~800k', value: '~800k' },
+                { label: '~900k', value: '~900k' },
+                { label: '1m+', value: '1m+' },
+                { label: '1.5m+', value: '1.5m+' },
+                { label: '2m+', value: '2m+' },
+                { label: '2.5m+', value: '2.5m+' },
+                { label: '3m+', value: '3m+' },
+                { label: '5m+', value: '5m+' },
+                { label: '7.5m+', value: '7.5m+' },
+                { label: '10m+', value: '10m+' }
+            ];
         } else if (state.category === 'tool') {
-            const typeMenu = new StringSelectMenuBuilder()
-                .setCustomId('tool_type')
-                .setPlaceholder('Select Tool Type (required)')
-                .addOptions([
-                    { label: 'Kits', value: 'Kits' },
-                    { label: 'Recs', value: 'Recs' },
-                    { label: 'Overclocks', value: 'Overclocks' },
-                    { label: 'Orbs', value: 'Orbs' },
-                    { label: 'Slot Unlock', value: 'Slot Unlock' },
-                    { label: 'Item Aug', value: 'Item Aug' }
-                ]);
-
-            await interaction.update({
-                content: 'Selected **Tool**. Choose Type (required):',
-                components: [new ActionRowBuilder().addComponents(typeMenu)]
-            });
+            options = [
+                { label: 'Kits', value: 'Kits' },
+                { label: 'Recs', value: 'Recs' },
+                { label: 'Overclocks', value: 'Overclocks' },
+                { label: 'Orbs', value: 'Orbs' },
+                { label: 'Slot Unlock', value: 'Slot Unlock' },
+                { label: 'Item Aug', value: 'Item Aug' }
+            ];
         }
+
+        const subMenu = new StringSelectMenuBuilder()
+            .setCustomId('post_sub1')
+            .setPlaceholder(`Select ${state.category} detail (required)`)
+            .addOptions(options);
+
+        await interaction.update({
+            content: `Selected **${state.category}**. Choose detail (required):`,
+            components: [new ActionRowBuilder().addComponents(subMenu)]
+        });
         return;
     }
 
@@ -336,7 +291,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Gear Stat Type - Final for Gear
+    // Gear Stat Type - Final
     if (interaction.isStringSelectMenu() && interaction.customId === 'gear_stat_type') {
         state.statType = interaction.values[0];
 
@@ -356,7 +311,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Gear: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat do you want to do?`,
+            content: `✅ Added Gear: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -371,37 +326,9 @@ client.on('interactionCreate', async interaction => {
             .setCustomId('trinket_stats')
             .setPlaceholder('Select Stats (required)')
             .addOptions([
-                { label: '055', value: '055' },
-                { label: '054', value: '054' },
-                { label: '053', value: '053' },
-                { label: '052', value: '052' },
-                { label: '050', value: '050' },
-                { label: '155', value: '155' },
-                { label: '255', value: '255' },
-                { label: '355', value: '355' },
-                { label: '455', value: '455' },
-                { label: '555', value: '555' },
-                { label: '550', value: '550' },
-                { label: '450', value: '450' },
-                { label: '540', value: '540' },
-                { label: '530', value: '530' },
-                { label: '350', value: '350' },
-                { label: '440', value: '440' },
-                { label: '500', value: '500' },
-                { label: '005', value: '005' },
-                { label: '045', value: '045' },
-                { label: '035', value: '035' },
-                { label: '025', value: '025' },
-                { label: '554', value: '554' },
-                { label: '553', value: '553' },
-                { label: '552', value: '552' },
-                { label: '551', value: '551' },
-                { label: '545', value: '545' },
-                { label: '535', value: '535' },
-                { label: '525', value: '525' },
-                { label: '505', value: '505' },
-                { label: '504', value: '504' },
-                { label: '405', value: '405' }
+                { label: 'Speed Def', value: 'Speed Def' },
+                { label: 'Power Speed', value: 'Power Speed' },
+                { label: 'Mixed', value: 'Mixed' }
             ]);
 
         await interaction.update({
@@ -411,7 +338,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Trinket Stats - Final for Trinket
+    // Trinket Stats - Final
     if (interaction.isStringSelectMenu() && interaction.customId === 'trinket_stats') {
         state.trinketStats = interaction.values[0];
 
@@ -431,7 +358,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Trinket: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat do you want to do?`,
+            content: `✅ Added Trinket: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -457,7 +384,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Cash: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat do you want to do?`,
+            content: `✅ Added Cash: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -490,7 +417,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Tool Amount - Final for Tool
+    // Tool Amount - Final
     if (interaction.isStringSelectMenu() && interaction.customId === 'tool_amount') {
         state.toolAmount = interaction.values[0];
 
@@ -510,7 +437,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Tool: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat do you want to do?`,
+            content: `✅ Added Tool: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -580,12 +507,52 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Search Button
+    // ==================== SEARCH FLOW (Multi-step) ====================
     if (interaction.isButton() && interaction.customId === 'search_trade_button') {
+        const categoryMenu = new StringSelectMenuBuilder()
+            .setCustomId('search_category')
+            .setPlaceholder('What are you searching for?')
+            .addOptions([
+                { label: 'Gear', value: 'gear' },
+                { label: 'Trinket', value: 'trinket' },
+                { label: 'Cash', value: 'cash' },
+                { label: 'Tool', value: 'tool' }
+            ]);
+
         await interaction.reply({
-            content: '🔍 Search is not fully implemented yet.',
+            content: '🔍 What category are you looking for?',
+            components: [new ActionRowBuilder().addComponents(categoryMenu)],
             ephemeral: true
         });
+        return;
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'search_category') {
+        const category = interaction.values[0];
+
+        let results = tradesDB.filter(trade => 
+            trade.offering.toLowerCase().includes(category.toLowerCase()) || 
+            trade.looking.toLowerCase().includes(category.toLowerCase())
+        );
+
+        if (results.length === 0) {
+            await interaction.reply({
+                content: `🔍 No matching **${category}** trades found.`,
+                ephemeral: true
+            });
+        } else {
+            let replyText = `🔍 Found ${results.length} matching **${category}** trade(s):\n\n`;
+            results.slice(0, 5).forEach(trade => {
+                replyText += `**Posted by** ${trade.posterTag}\n**Offering:** ${trade.offering}\n**Looking For:** ${trade.looking}\n\n`;
+            });
+            if (results.length > 5) replyText += `... and ${results.length - 5} more.`;
+
+            await interaction.reply({
+                content: replyText,
+                ephemeral: true
+            });
+        }
+        return;
     }
 });
 
