@@ -8,13 +8,24 @@ const client = new Client({
     ]
 });
 
-const TRADE_CHANNEL_ID = '1397162980327821413';   // ← Your channel ID is already here!
+const TRADE_CHANNEL_ID = '1397162980327821413';
 
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`✅ Bot is online! Logged in as ${client.user.tag}`);
+
+    // Register the /trade slash command
+    const commands = [{
+        name: 'trade',
+        description: 'Post a trade advertisement'
+    }];
+
+    await client.application.commands.set(commands);
+    console.log('✅ /trade command registered globally!');
 });
 
+// Handle interactions (modal + button)
 client.on('interactionCreate', async interaction => {
+    // Slash command - open modal
     if (interaction.isChatInputCommand() && interaction.commandName === 'trade') {
         const modal = new ModalBuilder()
             .setCustomId('trade_modal')
@@ -44,16 +55,17 @@ client.on('interactionCreate', async interaction => {
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false);
 
-        const row1 = new ActionRowBuilder().addComponents(offeringInput);
-        const row2 = new ActionRowBuilder().addComponents(lookingInput);
-        const row3 = new ActionRowBuilder().addComponents(robloxInput);
-        const row4 = new ActionRowBuilder().addComponents(extraInput);
-
-        modal.addComponents(row1, row2, row3, row4);
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(offeringInput),
+            new ActionRowBuilder().addComponents(lookingInput),
+            new ActionRowBuilder().addComponents(robloxInput),
+            new ActionRowBuilder().addComponents(extraInput)
+        );
 
         await interaction.showModal(modal);
     }
 
+    // Modal submitted → post the ad
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
@@ -65,10 +77,10 @@ client.on('interactionCreate', async interaction => {
             .setTitle('💰 New Trade Offer')
             .setDescription(`Posted by ${interaction.user}`)
             .addFields(
-                { name: 'Offering', value: offering, inline: false },
-                { name: 'Looking For', value: looking, inline: false },
+                { name: 'Offering', value: offering },
+                { name: 'Looking For', value: looking },
                 { name: 'Roblox Username', value: roblox, inline: true },
-                { name: 'Extra Info', value: extra, inline: false }
+                { name: 'Extra Info', value: extra }
             )
             .setTimestamp();
 
@@ -82,35 +94,23 @@ client.on('interactionCreate', async interaction => {
         const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
         if (tradeChannel) {
             await tradeChannel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: '✅ Your trade ad has been posted successfully!', ephemeral: true });
+            await interaction.reply({ content: '✅ Your trade ad has been posted!', ephemeral: true });
         } else {
-            await interaction.reply({ content: '❌ Trade channel not found.', ephemeral: true });
+            await interaction.reply({ content: '❌ Trade channel not found. Contact admin.', ephemeral: true });
         }
     }
 
+    // DM Me button clicked
     if (interaction.isButton() && interaction.customId.startsWith('dm_')) {
         const sellerId = interaction.customId.split('_')[1];
         try {
             const seller = await client.users.fetch(sellerId);
-            await interaction.user.send(`👋 You want to trade with **${seller.tag}**!\n\nStart chatting here. Good luck!`);
-            await interaction.reply({ content: '✅ I sent you a DM!', ephemeral: true });
+            await interaction.user.send(`👋 You clicked DM on a trade from **${seller.tag}**!\n\nStart your conversation here. Good luck trading!`);
+            await interaction.reply({ content: '✅ I sent you a DM to talk to the seller!', ephemeral: true });
         } catch (err) {
-            await interaction.reply({ content: '❌ Could not send DM. Make sure your DMs are open.', ephemeral: true });
+            await interaction.reply({ content: '❌ Could not send DM. Please make sure your DMs are open.', ephemeral: true });
         }
     }
 });
-// Register slash command and start the bot
-client.once('ready', async () => {
-    console.log(`✅ Bot is online! Logged in as ${client.user.tag}`);
-
-    const commands = [{
-        name: 'trade',
-        description: 'Post a trade advertisement'
-    }];
-
-    await client.application.commands.set(commands);
-    console.log('✅ /trade command registered!');
-});
 
 client.login(process.env.TOKEN);
- // ← You still need to put your token here
