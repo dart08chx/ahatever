@@ -99,8 +99,10 @@ client.on('interactionCreate', async interaction => {
         }
     }
 });
+// Register slash command and start the bot
+client.once('ready', async () => {
+    console.log(`✅ Bot is online! Logged in as ${client.user.tag}`);
 
-client.on('ready', async () => {
     const commands = [{
         name: 'trade',
         description: 'Post a trade advertisement'
@@ -110,4 +112,5 @@ client.on('ready', async () => {
     console.log('✅ /trade command registered!');
 });
 
-client.login(process.env.TOKEN);   // ← You still need to put your token here
+client.login(process.env.TOKEN);
+ // ← You still need to put your token here
