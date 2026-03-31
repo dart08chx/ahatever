@@ -8,7 +8,7 @@ const client = new Client({
     ]
 });
 
-const TRADE_CHANNEL_ID = '1397162980327821413';
+const TRADE_CHANNEL_ID = '1488481964494159953';
 
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
