@@ -8,33 +8,19 @@ const client = new Client({
     ]
 });
 
-const TRADE_CHANNEL_ID = '1397162980327821413';   // Your trading ads channel
+const TRADE_CHANNEL_ID = '1397162980327821413';
 
-// ==================== READY EVENT ====================
 client.once('ready', async () => {
     console.log(`✅ Bot is online! Logged in as ${client.user.tag}`);
 
-    // Register slash command (keep it as backup)
     const commands = [{ name: 'trade', description: 'Post a trade advertisement' }];
     await client.application.commands.set(commands);
     console.log('✅ /trade command registered');
-
-    // Optional: Send the permanent "Post Trade" button once (run this only once)
-    // const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
-    // if (tradeChannel) {
-    //     const row = new ActionRowBuilder().addComponents(
-    //         new ButtonBuilder()
-    //             .setCustomId('post_trade_button')
-    //             .setLabel('📝 Post New Trade')
-    //             .setStyle(ButtonStyle.Success)
-    //     );
-    //     await tradeChannel.send({ content: '**Trade Posting Panel**\nClick the button below to post your trade offer:', components: [row] });
-    // }
 });
 
 // ==================== INTERACTIONS ====================
 client.on('interactionCreate', async interaction => {
-    // === Open Modal from Slash Command or Button ===
+    // Open Modal (from /trade or permanent button)
     if ((interaction.isChatInputCommand() && interaction.commandName === 'trade') ||
         (interaction.isButton() && interaction.customId === 'post_trade_button')) {
 
@@ -60,9 +46,16 @@ client.on('interactionCreate', async interaction => {
             .setStyle(TextInputStyle.Short)
             .setRequired(true);
 
+        const imageInput = new TextInputBuilder()
+            .setCustomId('image')
+            .setLabel('Image / Proof Link (optional)')
+            .setPlaceholder('https://i.imgur.com/xxxxxx.jpg or Discord image link')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
         const extraInput = new TextInputBuilder()
             .setCustomId('extra')
-            .setLabel('Extra Info / Proof Link (optional)')
+            .setLabel('Extra Notes (optional)')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false);
 
@@ -70,6 +63,7 @@ client.on('interactionCreate', async interaction => {
             new ActionRowBuilder().addComponents(offeringInput),
             new ActionRowBuilder().addComponents(lookingInput),
             new ActionRowBuilder().addComponents(robloxInput),
+            new ActionRowBuilder().addComponents(imageInput),
             new ActionRowBuilder().addComponents(extraInput)
         );
 
@@ -77,11 +71,12 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // === Modal Submitted → Post Ad ===
+    // Modal Submitted → Post Trade Ad with Image Support
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
         const roblox = interaction.fields.getTextInputValue('roblox');
+        const imageUrl = interaction.fields.getTextInputValue('image').trim();
         const extra = interaction.fields.getTextInputValue('extra') || 'None';
 
         const embed = new EmbedBuilder()
@@ -92,9 +87,14 @@ client.on('interactionCreate', async interaction => {
                 { name: 'Offering', value: offering },
                 { name: 'Looking For', value: looking },
                 { name: 'Roblox Username', value: roblox, inline: true },
-                { name: 'Extra Info', value: extra }
+                { name: 'Extra Notes', value: extra }
             )
             .setTimestamp();
+
+        // Add image if user provided a valid link
+        if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+            embed.setImage(imageUrl);
+        }
 
         const dmButton = new ButtonBuilder()
             .setCustomId(`dm_${interaction.user.id}`)
@@ -106,42 +106,42 @@ client.on('interactionCreate', async interaction => {
         const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
         if (tradeChannel) {
             await tradeChannel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: '✅ Your trade ad has been posted!', ephemeral: true });
+            await interaction.reply({ content: '✅ Your trade ad has been posted successfully!', ephemeral: true });
+        } else {
+            await interaction.reply({ content: '❌ Trade channel not found.', ephemeral: true });
         }
     }
 
-    // === "DM Me" Button Clicked → Create Private Thread ===
+    // DM Button → Create Private Thread
     if (interaction.isButton() && interaction.customId.startsWith('dm_')) {
         const sellerId = interaction.customId.split('_')[1];
         const buyer = interaction.user;
 
         try {
             const seller = await client.users.fetch(sellerId);
-
-            // Create private thread in the same trading channel
             const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
+
             const thread = await tradeChannel.threads.create({
-                name: `Trade with ${buyer.username} & ${seller.username}`,
+                name: `Trade ${buyer.username} ↔ ${seller.username}`,
                 type: ChannelType.GuildPrivateThread,
                 autoArchiveDuration: 1440,   // 24 hours
-                reason: 'Trade conversation'
+                reason: 'Private trade discussion'
             });
 
-            // Add both users to the thread
             await thread.members.add(buyer.id);
             await thread.members.add(seller.id);
 
-            await thread.send(`**Trade started between ${buyer} and ${seller}**\n\nPlease discuss your trade here.\n\nOffering: (check original post)\nLooking For: (check original post)`);
+            await thread.send(`**New Trade Thread**\n${buyer} and ${seller} — discuss your trade here privately.\n\nCheck the original post above for details.`);
 
             await interaction.reply({ 
-                content: `✅ Private trade thread created! Go to ${thread}`, 
+                content: `✅ Private trade thread created! Go here: ${thread}`, 
                 ephemeral: true 
             });
 
         } catch (err) {
             console.error(err);
             await interaction.reply({ 
-                content: '❌ Failed to create trade thread. Make sure the seller is still in the server.', 
+                content: '❌ Could not create private thread. Make sure the seller is still in the server.', 
                 ephemeral: true 
             });
         }
