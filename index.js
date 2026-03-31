@@ -110,4 +110,4 @@ client.on('ready', async () => {
     console.log('✅ /trade command registered!');
 });
 
-client.login('MTQ4ODQ0MTgzNDUzODUz');   // ← You still need to put your token here
+client.login(process.env.TOKEN);   // ← You still need to put your token here
