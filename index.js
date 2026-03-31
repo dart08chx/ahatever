@@ -20,7 +20,7 @@ client.once('ready', async () => {
 
     // ==================== POST THE PERMANENT BUTTON (RUN ONLY ONCE) ====================
     // Uncomment the lines below only once, then comment them again after the button appears
-    /*
+    
     const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
     if (tradeChannel) {
         const button = new ButtonBuilder()
