@@ -17,12 +17,31 @@ client.once('ready', async () => {
     const commands = [{ name: 'trade', description: 'Post a trade advertisement' }];
     await client.application.commands.set(commands);
     console.log('✅ /trade command registered');
+
+    // ==================== POST THE PERMANENT BUTTON (RUN ONLY ONCE) ====================
+    // Uncomment the lines below only once, then comment them again after the button appears
+    
+    const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
+    if (tradeChannel) {
+        const button = new ButtonBuilder()
+            .setCustomId('post_trade_button')
+            .setLabel('📝 Post New Trade')
+            .setStyle(ButtonStyle.Success);
+
+        const row = new ActionRowBuilder().addComponents(button);
+
+        await tradeChannel.send({
+            content: '**Trade Posting Panel**\nClick the green button below to create your trade offer:',
+            components: [row]
+        });
+        console.log('✅ Permanent "Post New Trade" button has been posted!');
+    }
+    
 });
 
-// ==================== MAIN INTERACTION HANDLER ====================
 client.on('interactionCreate', async interaction => {
 
-    // 1. Open Trade Form (from permanent button OR /trade command)
+    // Open the trade form when clicking the big green button OR using /trade
     if ((interaction.isChatInputCommand() && interaction.commandName === 'trade') ||
         (interaction.isButton() && interaction.customId === 'post_trade_button')) {
 
@@ -32,40 +51,19 @@ client.on('interactionCreate', async interaction => {
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('offering')
-                    .setLabel('What are you Offering?')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
+                new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)
             ),
             new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('looking')
-                    .setLabel('What are you Looking For?')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
+                new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)
             ),
             new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('roblox')
-                    .setLabel('Roblox Username')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true)
+                new TextInputBuilder().setCustomId('roblox').setLabel('Your Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)
             ),
             new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('image')
-                    .setLabel('Image / Proof Link (optional)')
-                    .setPlaceholder('https://i.imgur.com/...')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(false)
+                new TextInputBuilder().setCustomId('image').setLabel('Image / Proof Link (optional)').setPlaceholder('https://i.imgur.com/...').setStyle(TextInputStyle.Short).setRequired(false)
             ),
             new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('extra')
-                    .setLabel('Extra Notes (optional)')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(false)
+                new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false)
             )
         );
 
@@ -73,7 +71,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // 2. Modal Submitted → Post the Trade Ad
+    // When someone submits the form → post the trade ad
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
@@ -93,7 +91,9 @@ client.on('interactionCreate', async interaction => {
             )
             .setTimestamp();
 
-        if (imageUrl.startsWith('http')) embed.setImage(imageUrl);
+        if (imageUrl && imageUrl.startsWith('http')) {
+            embed.setImage(imageUrl);
+        }
 
         const startButton = new ButtonBuilder()
             .setCustomId(`start_trade_${interaction.user.id}`)
@@ -109,7 +109,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3. "DM / Start Trade" Button → Create Private Thread
+    // When someone clicks "DM / Start Trade" button → create private thread
     if (interaction.isButton() && interaction.customId.startsWith('start_trade_')) {
         const sellerId = interaction.customId.split('_')[2];
         const buyer = interaction.user;
@@ -121,39 +121,22 @@ client.on('interactionCreate', async interaction => {
             const thread = await channel.threads.create({
                 name: `Trade ${buyer.username} ↔ ${seller.username}`,
                 type: ChannelType.GuildPrivateThread,
-                autoArchiveDuration: 1440, // 24 hours
+                autoArchiveDuration: 1440,
             });
 
             await thread.members.add(buyer.id);
             await thread.members.add(seller.id);
 
-            await thread.send(`**Private Trade Chat Started**\n${buyer} wants to trade with ${seller}\n\nDiscuss your offer here.`);
+            await thread.send(`**Private Trade Chat**\n${buyer} wants to trade with ${seller}\n\nFeel free to discuss here.`);
 
             await interaction.reply({ 
                 content: `✅ Private trade thread created!\nGo here: ${thread}`, 
                 ephemeral: true 
             });
-
         } catch (err) {
-            await interaction.reply({ content: '❌ Failed to create thread. Is the seller still in the server?', ephemeral: true });
+            await interaction.reply({ content: '❌ Failed to create thread.', ephemeral: true });
         }
     }
 });
 
 client.login(process.env.TOKEN);
-// === UNCOMMENT THIS ONLY ONCE TO POST THE BUTTON ===
-const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
-if (tradeChannel) {
-    const button = new ButtonBuilder()
-        .setCustomId('post_trade_button')
-        .setLabel('📝 Post New Trade')
-        .setStyle(ButtonStyle.Success);
-
-    const row = new ActionRowBuilder().addComponents(button);
-
-    await tradeChannel.send({
-        content: '**Trade Posting Panel**\nClick the green button below to post your trade offer:',
-        components: [row]
-    });
-    console.log('Posted the permanent Post Trade button');
-}
