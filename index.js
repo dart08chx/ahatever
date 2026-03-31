@@ -141,3 +141,19 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
+// === UNCOMMENT THIS ONLY ONCE TO POST THE BUTTON ===
+const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
+if (tradeChannel) {
+    const button = new ButtonBuilder()
+        .setCustomId('post_trade_button')
+        .setLabel('📝 Post New Trade')
+        .setStyle(ButtonStyle.Success);
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    await tradeChannel.send({
+        content: '**Trade Posting Panel**\nClick the green button below to post your trade offer:',
+        components: [row]
+    });
+    console.log('Posted the permanent Post Trade button');
+}
