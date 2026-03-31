@@ -15,13 +15,13 @@ client.once('ready', async () => {
     
     const commands = [
         { name: 'trade', description: 'Post a trade advertisement' },
-        { name: 'forcebutton', description: 'Force sticky button to appear' }
+        { name: 'forcebutton', description: 'Force the sticky button to appear' }
     ];
     await client.application.commands.set(commands);
     console.log('✅ Commands registered');
 });
 
-// Force button to appear
+// Force button command
 client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
         const postBtn = new ButtonBuilder()
@@ -42,24 +42,32 @@ client.on('interactionCreate', async interaction => {
                 content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nUse the buttons below:',
                 components: [row]
             });
-            await interaction.reply({ content: '✅ Sticky button posted!', ephemeral: true });
         }
+        await interaction.reply({ content: '✅ Sticky button posted!', ephemeral: true });
         return;
     }
 
     // Post New Trade Button
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
-        await interaction.deferUpdate();   // ← This is the key fix
+        await interaction.deferUpdate();   // This is the most important line
 
         const modal = new ModalBuilder()
             .setCustomId('trade_modal')
             .setTitle('📝 Post Your Trade');
 
         modal.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roblox').setLabel('Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false))
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('roblox').setLabel('Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false)
+            )
         );
 
         await interaction.showModal(modal);
@@ -105,7 +113,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.deferUpdate();
 
         await interaction.followUp({
-            content: '🔍 Search is not fully ready yet.\nScroll the channel or use Post New Trade.',
+            content: '🔍 Search is not ready yet.\nPlease scroll the channel or post new trades.',
             ephemeral: true
         });
     }
