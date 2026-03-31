@@ -36,7 +36,7 @@ client.once('ready', async () => {
         });
         console.log('✅ Permanent "Post New Trade" button has been posted!');
     }
-    */
+    
 });
 
 client.on('interactionCreate', async interaction => {
