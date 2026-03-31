@@ -8,40 +8,50 @@ const client = new Client({
     ]
 });
 
-const TRADE_CHANNEL_ID = '1488481964494159953';
+const TRADE_CHANNEL_ID = '1488481964494159953';   // ← Updated channel ID
+
+let stickyMessageId = null;
 
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
-
-    // Register slash command as backup
+    
     const commands = [{ name: 'trade', description: 'Post a trade advertisement' }];
     await client.application.commands.set(commands);
     console.log('✅ /trade command registered');
+});
 
-    // ==================== POST THE PERMANENT BUTTON (RUN ONLY ONCE) ====================
-    // Uncomment the lines below only once, then comment them again after the button appears
-    
-    const tradeChannel = client.channels.cache.get(TRADE_CHANNEL_ID);
-    if (tradeChannel) {
-        const button = new ButtonBuilder()
-            .setCustomId('post_trade_button')
-            .setLabel('📝 Post New Trade')
-            .setStyle(ButtonStyle.Success);
+// Sticky Button System - Keeps only one green button at the bottom
+client.on('messageCreate', async message => {
+    if (message.channel.id !== TRADE_CHANNEL_ID) return;
+    if (message.author.bot) return;
 
-        const row = new ActionRowBuilder().addComponents(button);
-
-        await tradeChannel.send({
-            content: '**Trade Posting Panel**\nClick the green button below to create your trade offer:',
-            components: [row]
-        });
-        console.log('✅ Permanent "Post New Trade" button has been posted!');
+    // Delete old sticky button
+    if (stickyMessageId) {
+        try {
+            const oldMsg = await message.channel.messages.fetch(stickyMessageId);
+            await oldMsg.delete().catch(() => {});
+        } catch (e) {}
     }
-    
+
+    // Create new sticky button
+    const button = new ButtonBuilder()
+        .setCustomId('post_trade_button')
+        .setLabel('📝 Post New Trade')
+        .setStyle(ButtonStyle.Success);
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    const stickyMsg = await message.channel.send({
+        content: '━━━━━━━━━━━━━━━━━━\n**📌 Trade Posting Panel**\nClick the green button below to post your trade offer:',
+        components: [row]
+    });
+
+    stickyMessageId = stickyMsg.id;
 });
 
 client.on('interactionCreate', async interaction => {
 
-    // Open the trade form when clicking the big green button OR using /trade
+    // Open Trade Form
     if ((interaction.isChatInputCommand() && interaction.commandName === 'trade') ||
         (interaction.isButton() && interaction.customId === 'post_trade_button')) {
 
@@ -50,28 +60,18 @@ client.on('interactionCreate', async interaction => {
             .setTitle('📝 Post Your Trade');
 
         modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('roblox').setLabel('Your Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('image').setLabel('Image / Proof Link (optional)').setPlaceholder('https://i.imgur.com/...').setStyle(TextInputStyle.Short).setRequired(false)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false)
-            )
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('offering').setLabel('What are you Offering?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('looking').setLabel('What are you Looking For?').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roblox').setLabel('Your Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('image').setLabel('Image / Proof Link (optional)').setPlaceholder('https://i.imgur.com/...').setStyle(TextInputStyle.Short).setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('extra').setLabel('Extra Notes (optional)').setStyle(TextInputStyle.Paragraph).setRequired(false))
         );
 
         await interaction.showModal(modal);
         return;
     }
 
-    // When someone submits the form → post the trade ad
+    // Modal Submitted → Post Trade Ad
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
@@ -91,9 +91,7 @@ client.on('interactionCreate', async interaction => {
             )
             .setTimestamp();
 
-        if (imageUrl && imageUrl.startsWith('http')) {
-            embed.setImage(imageUrl);
-        }
+        if (imageUrl && imageUrl.startsWith('http')) embed.setImage(imageUrl);
 
         const startButton = new ButtonBuilder()
             .setCustomId(`start_trade_${interaction.user.id}`)
@@ -109,7 +107,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // When someone clicks "DM / Start Trade" button → create private thread
+    // "DM / Start Trade" Button → Private Thread
     if (interaction.isButton() && interaction.customId.startsWith('start_trade_')) {
         const sellerId = interaction.customId.split('_')[2];
         const buyer = interaction.user;
@@ -127,12 +125,9 @@ client.on('interactionCreate', async interaction => {
             await thread.members.add(buyer.id);
             await thread.members.add(seller.id);
 
-            await thread.send(`**Private Trade Chat**\n${buyer} wants to trade with ${seller}\n\nFeel free to discuss here.`);
+            await thread.send(`**Private Trade Chat**\n${buyer} wants to trade with ${seller}\n\nDiscuss your offer here.`);
 
-            await interaction.reply({ 
-                content: `✅ Private trade thread created!\nGo here: ${thread}`, 
-                ephemeral: true 
-            });
+            await interaction.reply({ content: `✅ Private thread created!\nGo here: ${thread}`, ephemeral: true });
         } catch (err) {
             await interaction.reply({ content: '❌ Failed to create thread.', ephemeral: true });
         }
