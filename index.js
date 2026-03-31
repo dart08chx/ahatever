@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
+const fs = require('fs');
 
 const client = new Client({
     intents: [
@@ -9,10 +10,34 @@ const client = new Client({
 });
 
 const TRADE_CHANNEL_ID = '1488481964494159953';
+const DB_FILE = './trades.json';
 
 let stickyMessageId = null;
 const userState = new Map();
-const tradesDB = []; // Simple in-memory database for search
+let tradesDB = [];
+
+// Load database
+function loadDB() {
+    try {
+        if (fs.existsSync(DB_FILE)) {
+            tradesDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+            console.log(`✅ Loaded ${tradesDB.length} saved trades`);
+        }
+    } catch (e) {
+        console.log('No database file yet, starting fresh');
+    }
+}
+
+// Save database
+function saveDB() {
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(tradesDB, null, 2));
+    } catch (e) {
+        console.error('Failed to save database', e);
+    }
+}
+
+loadDB();
 
 client.once('ready', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
@@ -84,7 +109,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // ==================== POST FLOW (All categories expanded) ====================
+    // Start Post
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
         state = { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
         userState.set(userId, state);
@@ -126,7 +151,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Category → Sub options
+    // Category selection
     if (interaction.isStringSelectMenu() && interaction.customId === 'post_category') {
         state.category = interaction.values[0];
         userState.set(userId, state);
@@ -291,11 +316,11 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Gear Stat Type - Final
+    // Gear Stat Type - Final for Gear
     if (interaction.isStringSelectMenu() && interaction.customId === 'gear_stat_type') {
         state.statType = interaction.values[0];
 
-        const itemText = `${state.level} Level ${state.type} ${state.rarity} ${state.overclock} Overclock ${state.statType}`;
+        const itemText = `Gear: ${state.level} Level ${state.type} ${state.rarity} ${state.overclock} Overclock ${state.statType}`;
 
         if (state.side === 'offering') state.items.offering.push(itemText);
         else state.items.looking.push(itemText);
@@ -311,7 +336,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Gear: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -338,11 +363,11 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Trinket Stats - Final
+    // Trinket Stats
     if (interaction.isStringSelectMenu() && interaction.customId === 'trinket_stats') {
         state.trinketStats = interaction.values[0];
 
-        const itemText = `${state.trinketStats} ${state.trinketType}`;
+        const itemText = `Trinket: ${state.trinketStats} ${state.trinketType}`;
 
         if (state.side === 'offering') state.items.offering.push(itemText);
         else state.items.looking.push(itemText);
@@ -358,7 +383,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Trinket: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -368,7 +393,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isStringSelectMenu() && interaction.customId === 'cash_amount') {
         state.cashAmount = interaction.values[0];
 
-        const itemText = `${state.cashAmount} Cash`;
+        const itemText = `Cash: ${state.cashAmount}`;
 
         if (state.side === 'offering') state.items.offering.push(itemText);
         else state.items.looking.push(itemText);
@@ -384,7 +409,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Cash: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -417,11 +442,11 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Tool Amount - Final
+    // Tool Amount
     if (interaction.isStringSelectMenu() && interaction.customId === 'tool_amount') {
         state.toolAmount = interaction.values[0];
 
-        const itemText = `${state.toolAmount} ${state.toolType}`;
+        const itemText = `Tool: ${state.toolAmount} ${state.toolType}`;
 
         if (state.side === 'offering') state.items.offering.push(itemText);
         else state.items.looking.push(itemText);
@@ -437,7 +462,7 @@ client.on('interactionCreate', async interaction => {
             ]);
 
         await interaction.update({
-            content: `✅ Added Tool: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
             components: [new ActionRowBuilder().addComponents(continueMenu)]
         });
         return;
@@ -497,6 +522,15 @@ client.on('interactionCreate', async interaction => {
                 await channel.send({ embeds: [embed], components: [row] });
             }
 
+            // Save to persistent database
+            tradesDB.push({
+                posterTag: interaction.user.tag,
+                offering: state.items.offering,
+                looking: state.items.looking,
+                timestamp: Date.now()
+            });
+            saveDB();
+
             await interaction.update({
                 content: '✅ Trade posted successfully!',
                 components: []
@@ -507,7 +541,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // ==================== SEARCH FLOW (Multi-step) ====================
+    // ==================== ADVANCED SEARCH ====================
     if (interaction.isButton() && interaction.customId === 'search_trade_button') {
         const categoryMenu = new StringSelectMenuBuilder()
             .setCustomId('search_category')
@@ -531,8 +565,8 @@ client.on('interactionCreate', async interaction => {
         const category = interaction.values[0];
 
         let results = tradesDB.filter(trade => 
-            trade.offering.toLowerCase().includes(category.toLowerCase()) || 
-            trade.looking.toLowerCase().includes(category.toLowerCase())
+            trade.offering.some(item => item.toLowerCase().includes(category.toLowerCase())) || 
+            trade.looking.some(item => item.toLowerCase().includes(category.toLowerCase()))
         );
 
         if (results.length === 0) {
@@ -543,7 +577,7 @@ client.on('interactionCreate', async interaction => {
         } else {
             let replyText = `🔍 Found ${results.length} matching **${category}** trade(s):\n\n`;
             results.slice(0, 5).forEach(trade => {
-                replyText += `**Posted by** ${trade.posterTag}\n**Offering:** ${trade.offering}\n**Looking For:** ${trade.looking}\n\n`;
+                replyText += `**Posted by** ${trade.posterTag}\n**Offering:** ${trade.offering.join(', ')}\n**Looking For:** ${trade.looking.join(', ')}\n\n`;
             });
             if (results.length > 5) replyText += `... and ${results.length - 5} more.`;
 
