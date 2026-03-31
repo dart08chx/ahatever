@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require('discord.js');
 
 const client = new Client({
     intents: [
@@ -20,12 +20,12 @@ client.once('ready', async () => {
     console.log('✅ /trade command registered');
 });
 
-// ==================== STICKY PANEL (Fixed - no more spam) ====================
+// ==================== FIXED STICKY PANEL (No more spam) ====================
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
-    if (message.author.bot) return;                    // ← Important: ignore bot messages
+    if (message.author.bot) return;   // ← Prevents spam from bot messages
 
-    // Delete old sticky if exists
+    // Delete old sticky
     if (stickyMessageId) {
         try {
             const oldMsg = await message.channel.messages.fetch(stickyMessageId);
@@ -55,9 +55,9 @@ client.on('messageCreate', async message => {
 
 client.on('interactionCreate', async interaction => {
 
-    // Open Post Modal
-    if ((interaction.isChatInputCommand() && interaction.commandName === 'trade') ||
-        (interaction.isButton() && interaction.customId === 'post_trade_button')) {
+    // === Post New Trade Button ===
+    if (interaction.isButton() && interaction.customId === 'post_trade_button') {
+        await interaction.deferUpdate();   // ← This prevents "interaction failed"
 
         const modal = new ModalBuilder()
             .setCustomId('trade_modal')
@@ -74,7 +74,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // Modal Submitted
+    // === Modal Submitted ===
     if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
         const offering = interaction.fields.getTextInputValue('offering');
         const looking = interaction.fields.getTextInputValue('looking');
@@ -103,41 +103,26 @@ client.on('interactionCreate', async interaction => {
         const channel = client.channels.cache.get(TRADE_CHANNEL_ID);
         if (channel) {
             await channel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: '✅ Your trade has been posted!', ephemeral: true });
         }
+
+        await interaction.reply({ content: '✅ Your trade has been posted!', ephemeral: true });
     }
 
-    // Advanced Search Button (multi-step)
+    // === Search Button (Improved) ===
     if (interaction.isButton() && interaction.customId === 'search_trade_button') {
-        const categoryMenu = new StringSelectMenuBuilder()
-            .setCustomId('search_category')
-            .setPlaceholder('What are you searching for?')
-            .addOptions([
-                { label: 'Gear', value: 'gear' },
-                { label: 'Trinket', value: 'trinket' },
-                { label: 'Cash', value: 'cash' },
-                { label: 'Tool', value: 'tool' }
-            ]);
+        await interaction.deferUpdate();   // ← Prevents failed message
 
-        await interaction.reply({
-            content: '🔍 What category are you looking for?',
-            components: [new ActionRowBuilder().addComponents(categoryMenu)],
+        await interaction.followUp({
+            content: '🔍 Search is currently basic.\n\nPlease type what you are looking for in the channel or use the Post button to create offers.',
             ephemeral: true
         });
         return;
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'search_category') {
-        const category = interaction.values[0];
-        await interaction.reply({
-            content: `🔍 Searching for **${category.toUpperCase()}** trades...\n\n(No matching ads found yet - search is still being improved)`,
-            ephemeral: true
-        });
-        return;
-    }
-
-    // Start Trade → Private Thread
+    // === Start Trade Button ===
     if (interaction.isButton() && interaction.customId.startsWith('start_trade_')) {
+        await interaction.deferUpdate();
+
         const sellerId = interaction.customId.split('_')[2];
         const buyer = interaction.user;
 
@@ -164,13 +149,13 @@ client.on('interactionCreate', async interaction => {
                 components: [new ActionRowBuilder().addComponents(closeBtn)]
             });
 
-            await interaction.reply({ content: `✅ Private thread created!\nGo here: ${thread}`, ephemeral: true });
+            await interaction.followUp({ content: `✅ Private thread created!\nGo here: ${thread}`, ephemeral: true });
         } catch (err) {
-            await interaction.reply({ content: '❌ Failed to create thread.', ephemeral: true });
+            await interaction.followUp({ content: '❌ Failed to create thread.', ephemeral: true });
         }
     }
 
-    // Close Thread
+    // === Close Thread ===
     if (interaction.isButton() && interaction.customId === 'close_thread') {
         if (interaction.channel.isThread()) {
             await interaction.channel.setArchived(true);
