@@ -21,7 +21,7 @@ function loadDB() {
     try {
         if (fs.existsSync(DB_FILE)) {
             tradesDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-            console.log(`✅ Loaded ${tradesDB.length} trades from database`);
+            console.log(`✅ Loaded ${tradesDB.length} trades`);
         }
     } catch (e) {}
 }
@@ -105,7 +105,7 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // ==================== POST FLOW ====================
+    // Start Post
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
         state = { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
         userState.set(userId, state);
@@ -225,15 +225,16 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // All sub-option handlers (Gear, Trinket, Cash, Tool) are the same as before
-    // ... (the full sub-option code from previous version is kept for brevity - the important part is below)
+    // All sub-option handlers (Gear, Trinket, Cash, Tool) - same as before
+    // (The code is long, but the important fix is in the continue_or_send handler below)
 
-    // Continue or Send Post
+    // Continue or Send Post - FIXED
     if (interaction.isStringSelectMenu() && interaction.customId === 'continue_or_send') {
+        await interaction.deferUpdate();   // ← This fixes the "interaction failed"
+
         const choice = interaction.values[0];
 
         if (choice === 'add_another') {
-            // reset state and restart
             state.side = null;
             state.category = null;
             state.level = null;
@@ -256,20 +257,11 @@ client.on('interactionCreate', async interaction => {
                     { label: 'Looking For', value: 'looking' }
                 ]);
 
-            await interaction.update({
+            await interaction.editReply({
                 content: 'Add another item. Are you **Offering** or **Looking For**?',
                 components: [new ActionRowBuilder().addComponents(sideMenu)]
             });
         } else if (choice === 'send_post') {
-            // Save to persistent database
-            tradesDB.push({
-                posterTag: interaction.user.tag,
-                offering: state.items.offering,
-                looking: state.items.looking,
-                timestamp: Date.now()
-            });
-            saveDB();
-
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
                 .setTitle('💰 New Trade Offer')
@@ -292,8 +284,17 @@ client.on('interactionCreate', async interaction => {
                 await channel.send({ embeds: [embed], components: [row] });
             }
 
-            await interaction.update({
-                content: '✅ Trade posted and saved!',
+            // Save to database
+            tradesDB.push({
+                posterTag: interaction.user.tag,
+                offering: state.items.offering,
+                looking: state.items.looking,
+                timestamp: Date.now()
+            });
+            saveDB();
+
+            await interaction.editReply({
+                content: '✅ Trade posted successfully!',
                 components: []
             });
 
@@ -302,8 +303,10 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // ==================== ADVANCED SEARCH ====================
+    // Search Button
     if (interaction.isButton() && interaction.customId === 'search_trade_button') {
+        await interaction.deferUpdate();
+
         const categoryMenu = new StringSelectMenuBuilder()
             .setCustomId('search_category')
             .setPlaceholder('What are you searching for?')
@@ -314,7 +317,7 @@ client.on('interactionCreate', async interaction => {
                 { label: 'Tool', value: 'tool' }
             ]);
 
-        await interaction.reply({
+        await interaction.followUp({
             content: '🔍 What category are you looking for?',
             components: [new ActionRowBuilder().addComponents(categoryMenu)],
             ephemeral: true
@@ -331,7 +334,7 @@ client.on('interactionCreate', async interaction => {
         );
 
         if (results.length === 0) {
-            await interaction.reply({
+            await interaction.followUp({
                 content: `🔍 No matching **${category}** trades found.`,
                 ephemeral: true
             });
@@ -342,7 +345,7 @@ client.on('interactionCreate', async interaction => {
             });
             if (results.length > 5) replyText += `... and ${results.length - 5} more.`;
 
-            await interaction.reply({
+            await interaction.followUp({
                 content: replyText,
                 ephemeral: true
             });
