@@ -35,14 +35,17 @@ loadDB();
 
 client.once('clientReady', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
+    
+    const commands = [
+        { name: 'forcebutton', description: 'Force sticky button to appear' }
+    ];
+    await client.application.commands.set(commands);
 });
 
-// Sticky Panel - Reacts to bot posts + user messages, but NOT to the sticky message itself
+// Sticky Panel - Reacts to any message but never to the sticky itself
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
-
-    // Skip if this is the sticky message itself
-    if (message.id === stickyMessageId) return;
+    if (message.id === stickyMessageId) return;   // Prevent self-loop
 
     // Delete old sticky
     if (stickyMessageId) {
@@ -74,6 +77,12 @@ client.on('messageCreate', async message => {
 
 client.on('interactionCreate', async interaction => {
     try {
+        // Force Button
+        if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
+            await interaction.reply({ content: '✅ Forcing sticky panel...', flags: MessageFlags.Ephemeral });
+            return;
+        }
+
         // Post Button
         if (interaction.isButton() && interaction.customId === 'post_trade_button') {
             const modal = new ModalBuilder()
@@ -101,7 +110,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Modal Submit - Post
+        // Modal Submit - Post with format check
         if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -116,6 +125,33 @@ client.on('interactionCreate', async interaction => {
                 return;
             }
 
+            // ==================== FORMAT CHECK ====================
+            const formatHelp = '❌ Bad format! Use these examples:\n' +
+                'Gear: level 160 legendary shoe\n' +
+                'Trinket: 555 sprint\n' +
+                'Tool: 50 kits\n' +
+                'Cash: 500k or 1.2m';
+
+            const badLines = [];
+            for (const line of [...offeringLines, ...lookingLines]) {
+                const lower = line.toLowerCase();
+                if (lower.includes('level') || lower.match(/^\d+\s+\w+/)) {
+                    continue; // Gear or Tool OK
+                } else if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen')) {
+                    continue; // Trinket OK
+                } else if (/\d+[km]?$/i.test(lower)) {
+                    continue; // Cash OK
+                } else {
+                    badLines.push(`"${line}"`);
+                }
+            }
+
+            if (badLines.length > 0) {
+                await interaction.editReply({ content: `${formatHelp}\n\nBad lines: ${badLines.join(', ')}` });
+                return;
+            }
+
+            // Post the trade
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
                 .setTitle('💰 New Trade Offer')
@@ -134,9 +170,7 @@ client.on('interactionCreate', async interaction => {
             const row = new ActionRowBuilder().addComponents(dmBtn);
 
             const channel = client.channels.cache.get(TRADE_CHANNEL_ID);
-            if (channel) {
-                await channel.send({ embeds: [embed], components: [row] });
-            }
+            if (channel) await channel.send({ embeds: [embed], components: [row] });
 
             tradesDB.push({
                 posterTag: interaction.user.tag,
@@ -150,7 +184,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Search Button - Same form
+        // Search Button - same form
         if (interaction.isButton() && interaction.customId === 'search_trade_button') {
             const modal = new ModalBuilder()
                 .setCustomId('search_modal')
@@ -195,10 +229,8 @@ client.on('interactionCreate', async interaction => {
             const results = tradesDB.filter(trade => {
                 const tradeOff = trade.offering.map(item => item.toLowerCase());
                 const tradeLook = trade.looking.map(item => item.toLowerCase());
-
                 const matchOff = searchOffering.some(item => tradeOff.some(t => t.includes(item)));
                 const matchLook = searchLooking.some(item => tradeLook.some(t => t.includes(item)));
-
                 return matchOff || matchLook;
             });
 
