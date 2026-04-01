@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
-const fs = require('fs');
+const fs = require('fs').promises;  // Use promises for better async
 
 const client = new Client({
     intents: [
@@ -13,26 +13,32 @@ const TRADE_CHANNEL_ID = '1488481964494159953';
 const DB_FILE = './trades.json';
 
 let stickyMessageId = null;
-let lastStickyTime = 0;
 let tradesDB = [];
 
-// Database
-function loadDB() {
+// Load database
+async function loadDB() {
     try {
-        if (fs.existsSync(DB_FILE)) {
-            tradesDB = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-            console.log(`✅ Loaded ${tradesDB.length} trades`);
-        }
-    } catch (e) {}
+        const data = await fs.readFile(DB_FILE, 'utf8');
+        tradesDB = JSON.parse(data);
+        console.log(`✅ Loaded ${tradesDB.length} trades from database`);
+    } catch (e) {
+        if (e.code !== 'ENOENT') console.error('Load DB error:', e);
+        tradesDB = [];
+        console.log('No database file yet, starting fresh');
+    }
 }
 
-function saveDB() {
+// Save database
+async function saveDB() {
     try {
-        fs.writeFileSync(DB_FILE, JSON.stringify(tradesDB, null, 2));
-    } catch (e) {}
+        await fs.writeFile(DB_FILE, JSON.stringify(tradesDB, null, 2));
+        console.log(`✅ Saved ${tradesDB.length} trades to database`);
+    } catch (e) {
+        console.error('Save DB error:', e);
+    }
 }
 
-loadDB();
+await loadDB();  // Load on start
 
 client.once('clientReady', async () => {
     console.log(`✅ Bot is online as ${client.user.tag}`);
@@ -43,22 +49,16 @@ client.once('clientReady', async () => {
     await client.application.commands.set(commands);
 });
 
-// Sticky Panel - Improved to prevent loop after trade posts
+// Sticky Panel - Reacts to any message but never to the sticky itself
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
-
-    // Never react to our own sticky message
     if (message.id === stickyMessageId) return;
-
-    // Cooldown to prevent rapid firing
-    const now = Date.now();
-    if (now - lastStickyTime < 3000) return; // 3 second cooldown
 
     // Delete old sticky
     if (stickyMessageId) {
         try {
-            const old = await message.channel.messages.fetch(stickyMessageId).catch(() => null);
-            if (old) await old.delete().catch(() => {});
+            const old = await message.channel.messages.fetch(stickyMessageId);
+            await old.delete().catch(() => {});
         } catch (e) {}
     }
 
@@ -80,9 +80,8 @@ client.on('messageCreate', async message => {
             components: [row]
         });
         stickyMessageId = sticky.id;
-        lastStickyTime = now;
     } catch (err) {
-        console.error('Failed to send sticky. Check bot permissions in the channel!', err.message);
+        console.error('Failed to send sticky. Check bot permissions!', err.message);
     }
 });
 
@@ -136,7 +135,7 @@ client.on('interactionCreate', async interaction => {
                 return;
             }
 
-            // ==================== FORMAT CHECK ====================
+            // Format check
             const formatHelp = '❌ Bad format! Use these examples:\n' +
                 'Gear: level 160 legendary shoe\n' +
                 'Trinket: 555 sprint\n' +
@@ -149,7 +148,7 @@ client.on('interactionCreate', async interaction => {
                 if (!lower) continue;
 
                 if (lower.includes('level') || lower.match(/^\d+\s+\w+/)) continue;
-                if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen') || lower.includes('pen')) continue;
+                if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen')) continue;
                 if (/^\d+\s+\w+$/.test(lower) || lower.includes('kits') || lower.includes('recs')) continue;
                 if (/\d+[km]?$/i.test(lower)) continue;
 
@@ -188,9 +187,10 @@ client.on('interactionCreate', async interaction => {
                 looking: lookingLines,
                 timestamp: Date.now()
             });
-            saveDB();
 
-            await interaction.editReply({ content: '✅ Trade posted successfully!' });
+            await saveDB();   // Save after every post
+
+            await interaction.editReply({ content: '✅ Trade posted and saved successfully!' });
             return;
         }
 
