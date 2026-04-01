@@ -13,6 +13,7 @@ const TRADE_CHANNEL_ID = '1488481964494159953';
 const DB_FILE = './trades.json';
 
 let stickyMessageId = null;
+let lastStickyTime = 0;
 let tradesDB = [];
 
 // Database
@@ -42,16 +43,22 @@ client.once('clientReady', async () => {
     await client.application.commands.set(commands);
 });
 
-// Sticky Panel - Strong protection against self-loop
+// Sticky Panel - Improved to prevent loop after trade posts
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
-    if (message.id === stickyMessageId) return;   // Never react to sticky itself
 
-    // Delete old sticky first
+    // Never react to our own sticky message
+    if (message.id === stickyMessageId) return;
+
+    // Cooldown to prevent rapid firing
+    const now = Date.now();
+    if (now - lastStickyTime < 3000) return; // 3 second cooldown
+
+    // Delete old sticky
     if (stickyMessageId) {
         try {
-            const old = await message.channel.messages.fetch(stickyMessageId);
-            await old.delete().catch(() => {});
+            const old = await message.channel.messages.fetch(stickyMessageId).catch(() => null);
+            if (old) await old.delete().catch(() => {});
         } catch (e) {}
     }
 
@@ -73,8 +80,9 @@ client.on('messageCreate', async message => {
             components: [row]
         });
         stickyMessageId = sticky.id;
+        lastStickyTime = now;
     } catch (err) {
-        console.error('Failed to send sticky. Check bot permissions!', err.message);
+        console.error('Failed to send sticky. Check bot permissions in the channel!', err.message);
     }
 });
 
@@ -129,25 +137,20 @@ client.on('interactionCreate', async interaction => {
             }
 
             // ==================== FORMAT CHECK ====================
-            const formatHelp = '❌ Bad format detected!\n\nCorrect examples:\n' +
+            const formatHelp = '❌ Bad format! Use these examples:\n' +
                 'Gear: level 160 legendary shoe\n' +
                 'Trinket: 555 sprint\n' +
                 'Tool: 50 kits\n' +
-                'Cash: 500k or 1.2m\n\n' +
-                'One item per line.';
+                'Cash: 500k or 1.2m';
 
             const badLines = [];
             for (const line of [...offeringLines, ...lookingLines]) {
                 const lower = line.toLowerCase().trim();
                 if (!lower) continue;
 
-                // Gear
                 if (lower.includes('level') || lower.match(/^\d+\s+\w+/)) continue;
-                // Trinket
                 if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen') || lower.includes('pen')) continue;
-                // Tool
                 if (/^\d+\s+\w+$/.test(lower) || lower.includes('kits') || lower.includes('recs')) continue;
-                // Cash
                 if (/\d+[km]?$/i.test(lower)) continue;
 
                 badLines.push(`"${line}"`);
@@ -191,7 +194,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Search Button - same form
+        // Search Button
         if (interaction.isButton() && interaction.customId === 'search_trade_button') {
             const modal = new ModalBuilder()
                 .setCustomId('search_modal')
