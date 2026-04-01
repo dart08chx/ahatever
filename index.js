@@ -42,12 +42,12 @@ client.once('clientReady', async () => {
     await client.application.commands.set(commands);
 });
 
-// Sticky Panel - Reacts to any message but never to the sticky itself
+// Sticky Panel - Strong protection against self-loop
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
-    if (message.id === stickyMessageId) return;   // Prevent self-loop
+    if (message.id === stickyMessageId) return;   // Never react to sticky itself
 
-    // Delete old sticky
+    // Delete old sticky first
     if (stickyMessageId) {
         try {
             const old = await message.channel.messages.fetch(stickyMessageId);
@@ -67,12 +67,15 @@ client.on('messageCreate', async message => {
 
     const row = new ActionRowBuilder().addComponents(postBtn, searchBtn);
 
-    const sticky = await message.channel.send({
-        content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nClick below to post or search.',
-        components: [row]
-    });
-
-    stickyMessageId = sticky.id;
+    try {
+        const sticky = await message.channel.send({
+            content: '━━━━━━━━━━━━━━━━━━\n**📌 Jailbreak Trading Panel**\nClick below to post or search.',
+            components: [row]
+        });
+        stickyMessageId = sticky.id;
+    } catch (err) {
+        console.error('Failed to send sticky. Check bot permissions!', err.message);
+    }
 });
 
 client.on('interactionCreate', async interaction => {
@@ -126,24 +129,28 @@ client.on('interactionCreate', async interaction => {
             }
 
             // ==================== FORMAT CHECK ====================
-            const formatHelp = '❌ Bad format! Use these examples:\n' +
+            const formatHelp = '❌ Bad format detected!\n\nCorrect examples:\n' +
                 'Gear: level 160 legendary shoe\n' +
                 'Trinket: 555 sprint\n' +
                 'Tool: 50 kits\n' +
-                'Cash: 500k or 1.2m';
+                'Cash: 500k or 1.2m\n\n' +
+                'One item per line.';
 
             const badLines = [];
             for (const line of [...offeringLines, ...lookingLines]) {
-                const lower = line.toLowerCase();
-                if (lower.includes('level') || lower.match(/^\d+\s+\w+/)) {
-                    continue; // Gear or Tool OK
-                } else if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen')) {
-                    continue; // Trinket OK
-                } else if (/\d+[km]?$/i.test(lower)) {
-                    continue; // Cash OK
-                } else {
-                    badLines.push(`"${line}"`);
-                }
+                const lower = line.toLowerCase().trim();
+                if (!lower) continue;
+
+                // Gear
+                if (lower.includes('level') || lower.match(/^\d+\s+\w+/)) continue;
+                // Trinket
+                if (/^\d+\s+\w+$/.test(lower) || lower.includes('sprint') || lower.includes('regen') || lower.includes('pen')) continue;
+                // Tool
+                if (/^\d+\s+\w+$/.test(lower) || lower.includes('kits') || lower.includes('recs')) continue;
+                // Cash
+                if (/\d+[km]?$/i.test(lower)) continue;
+
+                badLines.push(`"${line}"`);
             }
 
             if (badLines.length > 0) {
@@ -211,7 +218,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Search Modal Submit
+        // Search Modal
         if (interaction.isModalSubmit() && interaction.customId === 'search_modal') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
