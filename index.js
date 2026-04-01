@@ -16,7 +16,7 @@ let stickyMessageId = null;
 const userState = new Map();
 let tradesDB = [];
 
-// Load database
+// Load / Save database
 function loadDB() {
     try {
         if (fs.existsSync(DB_FILE)) {
@@ -26,7 +26,6 @@ function loadDB() {
     } catch (e) {}
 }
 
-// Save database
 function saveDB() {
     try {
         fs.writeFileSync(DB_FILE, JSON.stringify(tradesDB, null, 2));
@@ -78,7 +77,7 @@ client.on('messageCreate', async message => {
 
 client.on('interactionCreate', async interaction => {
     const userId = interaction.user.id;
-    let state = userState.get(userId) || { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
+    let state = userState.get(userId) || { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, trinketFinalStat: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
 
     // Force Button
     if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
@@ -107,7 +106,7 @@ client.on('interactionCreate', async interaction => {
 
     // Start Post
     if (interaction.isButton() && interaction.customId === 'post_trade_button') {
-        state = { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
+        state = { mode: 'post', side: null, category: null, level: null, type: null, overclock: null, rarity: null, statType: null, trinketType: null, trinketStats: null, trinketFinalStat: null, cashAmount: null, toolType: null, toolAmount: null, items: { offering: [], looking: [] } };
         userState.set(userId, state);
 
         const sideMenu = new StringSelectMenuBuilder()
@@ -225,12 +224,324 @@ client.on('interactionCreate', async interaction => {
         return;
     }
 
-    // All sub-option handlers (Gear, Trinket, Cash, Tool) - same as before
-    // (The code is long, but the important fix is in the continue_or_send handler below)
+    // Gear Level
+    if (interaction.isStringSelectMenu() && interaction.customId === 'gear_level') {
+        state.level = interaction.values[0];
+        userState.set(userId, state);
 
-    // Continue or Send Post - FIXED
+        const typeMenu = new StringSelectMenuBuilder()
+            .setCustomId('gear_type')
+            .setPlaceholder('Select Type (required)')
+            .addOptions([
+                { label: 'Phoenix', value: 'Phoenix' },
+                { label: 'Legendary', value: 'Legendary' },
+                { label: 'Event', value: 'Event' },
+                { label: 'Epic', value: 'Epic' },
+                { label: 'Rare', value: 'Rare' },
+                { label: 'Uncommon', value: 'Uncommon' },
+                { label: 'Common', value: 'Common' }
+            ]);
+
+        await interaction.update({
+            content: `Level: **${state.level}**. Choose Type (required):`,
+            components: [new ActionRowBuilder().addComponents(typeMenu)]
+        });
+        return;
+    }
+
+    // Gear Type
+    if (interaction.isStringSelectMenu() && interaction.customId === 'gear_type') {
+        state.type = interaction.values[0];
+        userState.set(userId, state);
+
+        const overclockMenu = new StringSelectMenuBuilder()
+            .setCustomId('gear_overclock')
+            .setPlaceholder('Select Overclock (required)')
+            .addOptions([
+                { label: 'Full', value: 'Full' },
+                { label: 'None', value: 'None' },
+                { label: 'Missing', value: 'Missing' }
+            ]);
+
+        await interaction.update({
+            content: `Type: **${state.type}**. Choose Overclock (required):`,
+            components: [new ActionRowBuilder().addComponents(overclockMenu)]
+        });
+        return;
+    }
+
+    // Gear Overclock
+    if (interaction.isStringSelectMenu() && interaction.customId === 'gear_overclock') {
+        state.overclock = interaction.values[0];
+        userState.set(userId, state);
+
+        const rarityMenu = new StringSelectMenuBuilder()
+            .setCustomId('gear_rarity')
+            .setPlaceholder('Select Rarity (required)')
+            .addOptions([
+                { label: 'Original', value: 'Original' },
+                { label: 'Gold', value: 'Gold' },
+                { label: 'Divine', value: 'Divine' }
+            ]);
+
+        await interaction.update({
+            content: `Overclock: **${state.overclock}**. Choose Rarity (required):`,
+            components: [new ActionRowBuilder().addComponents(rarityMenu)]
+        });
+        return;
+    }
+
+    // Gear Rarity
+    if (interaction.isStringSelectMenu() && interaction.customId === 'gear_rarity') {
+        state.rarity = interaction.values[0];
+        userState.set(userId, state);
+
+        const statTypeMenu = new StringSelectMenuBuilder()
+            .setCustomId('gear_stat_type')
+            .setPlaceholder('Select Stat Type (required)')
+            .addOptions([
+                { label: 'Speed Def', value: 'Speed Def' },
+                { label: 'Power Speed', value: 'Power Speed' }
+            ]);
+
+        await interaction.update({
+            content: `Rarity: **${state.rarity}**. Choose Stat Type (required):`,
+            components: [new ActionRowBuilder().addComponents(statTypeMenu)]
+        });
+        return;
+    }
+
+    // Gear Stat Type - Final for Gear
+    if (interaction.isStringSelectMenu() && interaction.customId === 'gear_stat_type') {
+        state.statType = interaction.values[0];
+
+        const itemText = `Gear: ${state.level} Level ${state.type} ${state.rarity} ${state.overclock} Overclock ${state.statType}`;
+
+        if (state.side === 'offering') state.items.offering.push(itemText);
+        else state.items.looking.push(itemText);
+
+        userState.set(userId, state);
+
+        const continueMenu = new StringSelectMenuBuilder()
+            .setCustomId('continue_or_send')
+            .setPlaceholder('What next?')
+            .addOptions([
+                { label: 'Add Another Item', value: 'add_another' },
+                { label: 'Send Post Now', value: 'send_post' }
+            ]);
+
+        await interaction.deferUpdate();
+
+        await interaction.editReply({
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            components: [new ActionRowBuilder().addComponents(continueMenu)]
+        });
+        return;
+    }
+
+    // Trinket Type
+    if (interaction.isStringSelectMenu() && interaction.customId === 'trinket_type') {
+        state.trinketType = interaction.values[0];
+        userState.set(userId, state);
+
+        const statsMenu = new StringSelectMenuBuilder()
+            .setCustomId('trinket_stats')
+            .setPlaceholder('Select Stats (required)')
+            .addOptions([
+                { label: 'Speed Def', value: 'Speed Def' },
+                { label: 'Power Speed', value: 'Power Speed' },
+                { label: 'Mixed', value: 'Mixed' }
+            ]);
+
+        await interaction.update({
+            content: `Trinket Type: **${state.trinketType}**. Choose Stats (required):`,
+            components: [new ActionRowBuilder().addComponents(statsMenu)]
+        });
+        return;
+    }
+
+    // Trinket Stats → New step (Speed Def / Power Speed / Mixed)
+    if (interaction.isStringSelectMenu() && interaction.customId === 'trinket_stats') {
+        state.trinketStats = interaction.values[0];
+        userState.set(userId, state);
+
+        let finalOptions = [];
+
+        if (state.trinketStats === 'Speed Def') {
+            finalOptions = [
+                { label: '055', value: '055' },
+                { label: '155', value: '155' },
+                { label: '255', value: '255' },
+                { label: '355', value: '355' },
+                { label: '455', value: '455' },
+                { label: '054', value: '054' },
+                { label: '154', value: '154' },
+                { label: '254', value: '254' },
+                { label: '045', value: '045' },
+                { label: '145', value: '145' },
+                { label: '245', value: '245' },
+                { label: '044', value: '044' },
+                { label: '053', value: '053' },
+                { label: '035', value: '035' }
+            ];
+        } else if (state.trinketStats === 'Power Speed') {
+            finalOptions = [
+                { label: '550', value: '550' },
+                { label: '551', value: '551' },
+                { label: '552', value: '552' },
+                { label: '553', value: '553' },
+                { label: '554', value: '554' },
+                { label: '450', value: '450' },
+                { label: '451', value: '451' },
+                { label: '452', value: '452' },
+                { label: '540', value: '540' },
+                { label: '541', value: '541' },
+                { label: '542', value: '542' },
+                { label: '440', value: '440' },
+                { label: '530', value: '530' },
+                { label: '350', value: '350' }
+            ];
+        } else if (state.trinketStats === 'Mixed') {
+            finalOptions = [
+                { label: '555', value: '555' },
+                { label: '444', value: '444' },
+                { label: '543', value: '543' },
+                { label: '345', value: '345' },
+                { label: '453', value: '453' },
+                { label: '254', value: '254' },
+                { label: '542', value: '542' },
+                { label: '354', value: '354' },
+                { label: '453', value: '453' },
+                { label: '344', value: '344' }
+            ];
+        }
+
+        const finalMenu = new StringSelectMenuBuilder()
+            .setCustomId('trinket_final_stat')
+            .setPlaceholder('Select final stat (required)')
+            .addOptions(finalOptions);
+
+        await interaction.update({
+            content: `Trinket Stats: **${state.trinketStats}**. Choose final stat (required):`,
+            components: [new ActionRowBuilder().addComponents(finalMenu)]
+        });
+        return;
+    }
+
+    // Trinket Final Stat
+    if (interaction.isStringSelectMenu() && interaction.customId === 'trinket_final_stat') {
+        state.trinketFinalStat = interaction.values[0];
+
+        const itemText = `Trinket: ${state.trinketType} ${state.trinketStats} ${state.trinketFinalStat}`;
+
+        if (state.side === 'offering') state.items.offering.push(itemText);
+        else state.items.looking.push(itemText);
+
+        userState.set(userId, state);
+
+        const continueMenu = new StringSelectMenuBuilder()
+            .setCustomId('continue_or_send')
+            .setPlaceholder('What next?')
+            .addOptions([
+                { label: 'Add Another Item', value: 'add_another' },
+                { label: 'Send Post Now', value: 'send_post' }
+            ]);
+
+        await interaction.deferUpdate();
+
+        await interaction.editReply({
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            components: [new ActionRowBuilder().addComponents(continueMenu)]
+        });
+        return;
+    }
+
+    // Cash Amount (same as before)
+    if (interaction.isStringSelectMenu() && interaction.customId === 'cash_amount') {
+        state.cashAmount = interaction.values[0];
+
+        const itemText = `Cash: ${state.cashAmount}`;
+
+        if (state.side === 'offering') state.items.offering.push(itemText);
+        else state.items.looking.push(itemText);
+
+        userState.set(userId, state);
+
+        const continueMenu = new StringSelectMenuBuilder()
+            .setCustomId('continue_or_send')
+            .setPlaceholder('What next?')
+            .addOptions([
+                { label: 'Add Another Item', value: 'add_another' },
+                { label: 'Send Post Now', value: 'send_post' }
+            ]);
+
+        await interaction.deferUpdate();
+
+        await interaction.editReply({
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            components: [new ActionRowBuilder().addComponents(continueMenu)]
+        });
+        return;
+    }
+
+    // Tool Type
+    if (interaction.isStringSelectMenu() && interaction.customId === 'tool_type') {
+        state.toolType = interaction.values[0];
+        userState.set(userId, state);
+
+        const amountMenu = new StringSelectMenuBuilder()
+            .setCustomId('tool_amount')
+            .setPlaceholder('Select Amount (required)')
+            .addOptions([
+                { label: '1', value: '1' },
+                { label: '5', value: '5' },
+                { label: '10', value: '10' },
+                { label: '20', value: '20' },
+                { label: '50', value: '50' },
+                { label: '100', value: '100' },
+                { label: '200', value: '200' },
+                { label: '500', value: '500' },
+                { label: '500+', value: '500+' }
+            ]);
+
+        await interaction.update({
+            content: `Tool Type: **${state.toolType}**. Choose Amount (required):`,
+            components: [new ActionRowBuilder().addComponents(amountMenu)]
+        });
+        return;
+    }
+
+    // Tool Amount
+    if (interaction.isStringSelectMenu() && interaction.customId === 'tool_amount') {
+        state.toolAmount = interaction.values[0];
+
+        const itemText = `Tool: ${state.toolAmount} ${state.toolType}`;
+
+        if (state.side === 'offering') state.items.offering.push(itemText);
+        else state.items.looking.push(itemText);
+
+        userState.set(userId, state);
+
+        const continueMenu = new StringSelectMenuBuilder()
+            .setCustomId('continue_or_send')
+            .setPlaceholder('What next?')
+            .addOptions([
+                { label: 'Add Another Item', value: 'add_another' },
+                { label: 'Send Post Now', value: 'send_post' }
+            ]);
+
+        await interaction.deferUpdate();
+
+        await interaction.editReply({
+            content: `✅ Added: **${itemText}**\n\nOffering: ${state.items.offering.join('\n') || 'None'}\nLooking For: ${state.items.looking.join('\n') || 'None'}\n\nWhat next?`,
+            components: [new ActionRowBuilder().addComponents(continueMenu)]
+        });
+        return;
+    }
+
+    // Continue or Send Post
     if (interaction.isStringSelectMenu() && interaction.customId === 'continue_or_send') {
-        await interaction.deferUpdate();   // ← This fixes the "interaction failed"
+        await interaction.deferUpdate();
 
         const choice = interaction.values[0];
 
@@ -244,6 +555,7 @@ client.on('interactionCreate', async interaction => {
             state.statType = null;
             state.trinketType = null;
             state.trinketStats = null;
+            state.trinketFinalStat = null;
             state.cashAmount = null;
             state.toolType = null;
             state.toolAmount = null;
@@ -284,7 +596,6 @@ client.on('interactionCreate', async interaction => {
                 await channel.send({ embeds: [embed], components: [row] });
             }
 
-            // Save to database
             tradesDB.push({
                 posterTag: interaction.user.tag,
                 offering: state.items.offering,
