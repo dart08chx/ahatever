@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
-const fs = require('fs').promises;  // Use promises for better async
+const fs = require('fs').promises;
 
 const client = new Client({
     intents: [
@@ -20,11 +20,10 @@ async function loadDB() {
     try {
         const data = await fs.readFile(DB_FILE, 'utf8');
         tradesDB = JSON.parse(data);
-        console.log(`✅ Loaded ${tradesDB.length} trades from database`);
+        console.log(`✅ Loaded ${tradesDB.length} trades`);
     } catch (e) {
-        if (e.code !== 'ENOENT') console.error('Load DB error:', e);
         tradesDB = [];
-        console.log('No database file yet, starting fresh');
+        console.log('No database file, starting fresh');
     }
 }
 
@@ -32,29 +31,21 @@ async function loadDB() {
 async function saveDB() {
     try {
         await fs.writeFile(DB_FILE, JSON.stringify(tradesDB, null, 2));
-        console.log(`✅ Saved ${tradesDB.length} trades to database`);
     } catch (e) {
         console.error('Save DB error:', e);
     }
 }
 
-await loadDB();  // Load on start
+await loadDB();
 
 client.once('clientReady', async () => {
-    console.log(`✅ Bot is online as ${client.user.tag}`);
-    
-    const commands = [
-        { name: 'forcebutton', description: 'Force sticky button to appear' }
-    ];
-    await client.application.commands.set(commands);
+    console.log(`✅ Trading Bot is online`);
 });
 
-// Sticky Panel - Reacts to any message but never to the sticky itself
 client.on('messageCreate', async message => {
     if (message.channel.id !== TRADE_CHANNEL_ID) return;
     if (message.id === stickyMessageId) return;
 
-    // Delete old sticky
     if (stickyMessageId) {
         try {
             const old = await message.channel.messages.fetch(stickyMessageId);
@@ -87,12 +78,6 @@ client.on('messageCreate', async message => {
 
 client.on('interactionCreate', async interaction => {
     try {
-        // Force Button
-        if (interaction.isChatInputCommand() && interaction.commandName === 'forcebutton') {
-            await interaction.reply({ content: '✅ Forcing sticky panel...', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
         // Post Button
         if (interaction.isButton() && interaction.customId === 'post_trade_button') {
             const modal = new ModalBuilder()
@@ -120,7 +105,7 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        // Modal Submit - Post with format check
+        // Post Modal with format check
         if (interaction.isModalSubmit() && interaction.customId === 'trade_modal') {
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -160,7 +145,7 @@ client.on('interactionCreate', async interaction => {
                 return;
             }
 
-            // Post the trade
+            // Post
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
                 .setTitle('💰 New Trade Offer')
@@ -187,10 +172,9 @@ client.on('interactionCreate', async interaction => {
                 looking: lookingLines,
                 timestamp: Date.now()
             });
+            await saveDB();
 
-            await saveDB();   // Save after every post
-
-            await interaction.editReply({ content: '✅ Trade posted and saved successfully!' });
+            await interaction.editReply({ content: '✅ Trade posted successfully!' });
             return;
         }
 
